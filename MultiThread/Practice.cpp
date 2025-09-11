@@ -5,7 +5,7 @@
 #include <vector>
 #include <atomic>
 
-std::atomic<int> sum = 0;
+volatile int sum = 0;
 std::mutex mtx;
 using namespace std::chrono;
 
@@ -41,6 +41,10 @@ int main()
 
 void worker(const int& loopCount)
 {
+	volatile int summ = 0;
 	for (int i = 0; i < loopCount; ++i)
-		sum += 2;
+		summ += 2;
+	mtx.lock();
+	sum += summ;
+	mtx.unlock();
 }
