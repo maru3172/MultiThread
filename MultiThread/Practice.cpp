@@ -1,7 +1,9 @@
 #include <iostream>
 #include <thread>
+#include <mutex>
 
 int sum;
+std::mutex mtx;
 
 void worker();
 
@@ -17,6 +19,8 @@ int main()
 
 void worker()
 {
+	mtx.lock();
 	for (int i = 0; i < 25000000; ++i)
 		sum = sum + 2;
+	mtx.unlock();
 }
