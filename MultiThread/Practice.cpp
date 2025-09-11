@@ -42,5 +42,5 @@ int main()
 void worker(const int& loopCount)
 {
 	for (int i = 0; i < loopCount; ++i)
-		sum = sum + 2;
+		sum += 2;
 }
