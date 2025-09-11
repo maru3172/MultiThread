@@ -4,7 +4,7 @@
 #include <chrono>
 #include <vector>
 
-int sum;
+volatile int sum = 0;
 std::mutex mtx;
 using namespace std::chrono;
 
@@ -32,7 +32,7 @@ int main()
 		sum = sum + 2;
 	auto end = high_resolution_clock::now();
 	auto duration = duration_cast<milliseconds>(end - start);
-	std::cout << "single:" << duration.count() << "ms" << std::endl;
+	std::cout << "single: " << duration.count() << "ms" << std::endl;
 
 	std::cout << "sum = " << sum << std::endl;
 
