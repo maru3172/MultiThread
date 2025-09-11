@@ -3,8 +3,9 @@
 #include <mutex>
 #include <chrono>
 #include <vector>
+#include <atomic>
 
-volatile int sum = 0;
+std::atomic<int> sum = 0;
 std::mutex mtx;
 using namespace std::chrono;
 
@@ -14,8 +15,8 @@ int main()
 {
 	for (int num_threads = 1; num_threads <= 16; num_threads *= 2) {
 		sum = 0;
-		auto start = high_resolution_clock::now();
 		std::vector<std::thread> threads;
+		auto start = high_resolution_clock::now();
 		for (int i = 0; i < num_threads; ++i)
 			threads.emplace_back(worker, 50000000 / num_threads);
 		for (auto& t : threads)
@@ -40,8 +41,6 @@ int main()
 
 void worker(const int& loopCount)
 {
-	mtx.lock();
 	for (int i = 0; i < loopCount; ++i)
 		sum = sum + 2;
-	mtx.unlock();
 }
