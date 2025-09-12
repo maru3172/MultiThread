@@ -5,24 +5,30 @@
 #include <vector>
 #include <atomic>
 
+const int MAX_THREADS = 16;
 volatile int sum = 0;
+volatile int array_sum[MAX_THREADS] = { 0 };
 std::mutex mtx;
 using namespace std::chrono;
 
-void worker(const int& loopCount);
+void worker(const int& thread_id, const int& loopCount);
 
 int main()
 {
-	for (int num_threads = 1; num_threads <= 16; num_threads *= 2) {
+	for (int num_threads = 1; num_threads <= MAX_THREADS; num_threads *= 2) {
 		sum = 0;
 		std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
 		for (int i = 0; i < num_threads; ++i)
-			threads.emplace_back(worker, 50000000 / num_threads);
-		for (auto& t : threads)
-			t.join();
+			threads.emplace_back(worker, i, 50000000 / num_threads);
+		for (int i = 0; i < num_threads; ++i) {
+			threads[i].join();
+			sum = sum + array_sum[i];
+			array_sum[i] = 0;
+		}
 		auto end = high_resolution_clock::now();
 		auto duration = duration_cast<milliseconds>(end - start);
+
 		std::cout << num_threads << "multi: " << duration.count() << "ms" << std::endl;
 		std::cout << "sum = " << sum << std::endl;
 	}
@@ -39,12 +45,8 @@ int main()
 
 }
 
-void worker(const int& loopCount)
+void worker(const int& thread_id, const int& loopCount)
 {
-	volatile int summ = 0;
 	for (int i = 0; i < loopCount; ++i)
-		summ += 2;
-	mtx.lock();
-	sum += summ;
-	mtx.unlock();
+		array_sum[thread_id] = array_sum[thread_id] + 2;
 }
