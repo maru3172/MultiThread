@@ -18,5 +18,11 @@
     <ClCompile Include="Practice.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Send_Recv.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="peterson.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
