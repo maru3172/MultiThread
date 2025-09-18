@@ -4,7 +4,6 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
-#include <atomic>
 
 
 const int MAX_THREADS = 8;
