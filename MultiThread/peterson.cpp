@@ -55,7 +55,7 @@ void p_lock(const int thread_id)
 		maxLabel = std::max(maxLabel, label[k]);
 	label[thread_id] = maxLabel + 1;
 	for (int k = 0; k < MAX_THREADS; k++)
-		while (flags[k] && (label[k] < label[thread_id] || (label[k] == label[thread_id] && k < thread_id)));
+		while ((flags[k] == true) && (k != thread_id) && (label[k] < label[thread_id] || (label[k] == label[thread_id] && k < thread_id)));
 }
 
 void p_unlock(const int thread_id)
