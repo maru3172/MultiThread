@@ -3,15 +3,17 @@
 #include <mutex>
 #include <chrono>
 #include <vector>
+#include <algorithm>
 
 
-const int MAX_THREADS = 2;
+const int MAX_THREADS = 8;
 volatile int sum = 0;
 std::mutex mtx;
 using namespace std::chrono;
 
 volatile int victim = 0;
-volatile bool flags[2] = { false, false };
+volatile int label[MAX_THREADS] = { 0 };
+volatile bool flags[MAX_THREADS] = { false, false };
 
 void p_lock(const int thread_id);
 void p_unlock(const int thread_id);
@@ -50,8 +52,8 @@ void p_lock(const int thread_id)
 {
 	const int other = 1 - thread_id;
 	flags[thread_id] = true;
-	victim = thread_id;
-	while ((true == flags[other]) && (victim == thread_id));
+	label[thread_id] = std::max(label[0], label[MAX_THREADS - 1]) + 1;
+	while ((true == flags[other]) && (label[other] < label[thread_id]));
 }
 
 void p_unlock(const int thread_id)
