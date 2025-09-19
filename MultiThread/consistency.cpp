@@ -1,9 +1,10 @@
 #include <iostream>
 #include <thread>
+#include <atomic>
 
 const int LOOP_COUNT = 50000000;
 
-volatile int x, y;
+std::atomic<int> x, y;
 int trace_x[LOOP_COUNT], trace_y[LOOP_COUNT];
 
 void update_x() {
@@ -29,7 +30,7 @@ int main() {
 	for (int i = 0; i < LOOP_COUNT - 1; ++i) {
 		if (trace_x[i] == trace_x[i + 1])
 			if (trace_y[trace_x[i]] == trace_y[trace_x[i] + 1])
-				if (trace_y[trace_x[i]] != i)
+				if (trace_y[trace_x[i]] == i)
 					count++;
 	}
 	std::cout << "Memory nconsistency: " << count << std::endl;
