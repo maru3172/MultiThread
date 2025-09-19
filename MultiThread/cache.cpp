@@ -14,8 +14,10 @@ void watch_ptr() {
 	int error_count = 0;
 	while (!done) {
 		int v = *ptr;
-		if ((v != 0) && (v != -1))
+		if ((v != 0) && (v != -1)){
+			printf("%X ", v);
 			error_count++;
+		}
 	}
 	std::cout << "Error count = " << error_count << std::endl;
 }
