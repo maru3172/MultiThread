@@ -4,7 +4,7 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
-
+#include <atomic>
 
 const int MAX_THREADS = 8;
 volatile int sum = 0;
@@ -22,6 +22,7 @@ void worker(const int thread_id, const int loop_count);
 int main()
 {
 	for (int num_threads = 1; num_threads <= MAX_THREADS; num_threads *= 2) {
+		maxLabel = 0;
 		sum = 0;
 		std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
@@ -54,6 +55,10 @@ void p_lock(const int thread_id)
 	for (int k = 0; k < MAX_THREADS; k++)
 		maxLabel = std::max(maxLabel, label[k]);
 	label[thread_id] = maxLabel + 1;
+	//	if (maxLabel < label[k])
+	//		maxLabel.store(label[k]);
+	//maxLabel += 1;
+	//label[thread_id].store(maxLabel);
 	for (int k = 0; k < MAX_THREADS; k++)
 		while ((flags[k] == true) && (label[k] < label[thread_id] || (label[k] == label[thread_id] && k < thread_id)));
 }
@@ -66,8 +71,10 @@ void p_unlock(const int thread_id)
 void worker(const int thread_id, const int loop_count)
 {
 	for (int i = 0; i < loop_count; ++i) {
+		// mtx.lock();
 		p_lock(thread_id);
 		sum = sum + 2;
 		p_unlock(thread_id);
+		// mtx.unlock();
 	}
 }
