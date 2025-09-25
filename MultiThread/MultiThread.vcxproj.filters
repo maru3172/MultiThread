@@ -21,6 +21,15 @@
     <ClCompile Include="Send_Recv.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Bakery.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="cache.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="consistency.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
     <ClCompile Include="peterson.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
