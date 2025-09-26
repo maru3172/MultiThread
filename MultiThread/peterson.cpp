@@ -16,6 +16,7 @@ std::atomic<bool> flags[2] = { false, false };
 void p_lock(const int thread_id);
 void p_unlock(const int thread_id);
 void worker(const int thread_id, const int loop_count);
+void worker3(const int thread_id, const int loop_count);
 
 int main()
 {
@@ -24,7 +25,7 @@ int main()
 		std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
 		for (int i = 0; i < num_threads; ++i)
-			threads.emplace_back(worker, i, 50000000 / num_threads);
+			threads.emplace_back(worker3, i, 50000000 / num_threads);
 		for (int i = 0; i < num_threads; ++i)
 			threads[i].join();
 		auto end = high_resolution_clock::now();
@@ -66,5 +67,31 @@ void worker(const int thread_id, const int loop_count)
 		p_lock(thread_id);
 		sum = sum + 2;
 		p_unlock(thread_id);
+	}
+}
+
+std::atomic<bool> lockFlag(false);
+
+bool CAS(std::atomic_bool* lock_flag, bool old_value, bool new_value)
+{
+	return std::atomic_compare_exchange_strong(lock_flag, &old_value, new_value);
+}
+
+void CAS_Lock()
+{
+	while (CAS(&lockFlag, 0, 1));
+}
+
+void CAS_Unlock()
+{
+	lockFlag = false;
+}
+
+void worker3(const int thread_id, const int loop_count)
+{
+	for (int i = 0; i < loop_count; ++i) {
+		CAS_Lock();
+		sum = sum + 2;
+		CAS_Unlock();
 	}
 }
