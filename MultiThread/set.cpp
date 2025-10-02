@@ -5,14 +5,24 @@
 #include <vector>
 #include <numeric>
 
-const int MAX_THREADS = 32;
+const int MAX_THREADS = 16;
 using namespace std::chrono;
+
+class DUMMY_MTX {
+public:
+	void lock() {}
+	void unlock() {}
+};
 
 class NODE {
 public:
 	NODE(int x) : next(nullptr), value(x) {}
+
+	void lock() { mtx.lock(); }
+	void unlock() { mtx.unlock(); }
 	int value;
 	NODE* next;
+	std::mutex mtx;
 };
 
 class C_SET {
@@ -120,6 +130,110 @@ private:
 	std::mutex mtx;
 };
 
+class F_SET {
+public:
+	F_SET() {
+		head = new NODE(std::numeric_limits<int>::min());
+		tail = new NODE(std::numeric_limits<int>::max());
+		head->next = tail;
+	}
+
+	~F_SET()
+	{
+		clear();
+		delete head;
+		delete tail;
+	}
+
+	void clear()
+	{
+		NODE* curr = head->next;
+		while (curr != tail) {
+			NODE* temp = curr;
+			curr = curr->next;
+			delete temp;
+		}
+		head->next = tail;
+	}
+
+	bool add(int x)
+	{
+		auto prev = head;
+		auto curr = prev->next;
+
+		while (curr->value < x) {
+			prev = curr;
+			curr = curr->next;
+		}
+
+		prev->lock(); curr->lock();
+		if (curr->value == x) {
+			prev->unlock(); curr->unlock();
+			return false;
+		}
+
+		auto newNode = new NODE(x);
+		newNode->next = curr;
+		prev->next = newNode;
+		prev->unlock(); curr->unlock();
+		return true;
+	}
+
+	bool remove(int x)
+	{
+		auto prev = head;
+		auto curr = prev->next;
+
+		while (curr->value < x) {
+			prev = curr;
+			curr = curr->next;
+		}
+
+		prev->lock(); curr->lock();
+		if (curr->value == x) {
+			prev->next = curr->next;
+			delete curr;
+			prev->unlock(); curr->unlock();
+			return true;
+		}
+
+		prev->unlock(); curr->unlock();
+		return false;
+	}
+
+	bool contains(int x)
+	{
+		auto prev = head;
+		auto curr = prev->next;
+
+		while (curr->value < x) {
+			prev = curr;
+			curr = curr->next;
+		}
+
+		prev->lock(); curr->lock();
+		if (curr->value == x) {
+			prev->unlock(); curr->unlock();
+			return true;
+		}
+		prev->unlock(); curr->unlock();
+		return false;
+	}
+
+	void print20()
+	{
+		auto curr = head->next;
+		for (int i = 0; i < 20 && curr != tail; ++i) {
+			std::cout << curr->value << ", ";
+			curr = curr->next;
+		}
+		std::cout << std::endl;
+	}
+
+private:
+	NODE* head, * tail;
+};
+
 C_SET set;
 
 void benchmark(const int num_threads)
@@ -138,7 +252,7 @@ void benchmark(const int num_threads)
 
 int main()
 {
-	for (int num_thread = 1; num_thread <= MAX_THREADS; num_thread *= 2) {
+	for (int num_thread = 16; num_thread >= 1; num_thread /= 2) {
 		set.clear();
 		std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
