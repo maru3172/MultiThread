@@ -159,14 +159,17 @@ public:
 	bool add(int x)
 	{
 		auto prev = head;
+		prev->lock();
 		auto curr = prev->next;
+		curr->lock();
 
 		while (curr->value < x) {
+			prev->unlock();
 			prev = curr;
 			curr = curr->next;
+			curr->lock();
 		}
-
-		prev->lock(); curr->lock();
+		
 		if (curr->value == x) {
 			prev->unlock(); curr->unlock();
 			return false;
@@ -182,36 +185,40 @@ public:
 	bool remove(int x)
 	{
 		auto prev = head;
+		prev->lock();
 		auto curr = prev->next;
+		curr->lock();
 
 		while (curr->value < x) {
+			prev->unlock();
 			prev = curr;
 			curr = curr->next;
+			curr->lock();
 		}
-
-		prev->lock(); curr->lock();
+		
 		if (curr->value == x) {
+			prev->lock(); curr->lock();
 			prev->next = curr->next;
-			delete curr;
 			prev->unlock(); curr->unlock();
+			delete curr;
 			return true;
 		}
 
-		prev->unlock(); curr->unlock();
 		return false;
 	}
 
 	bool contains(int x)
 	{
 		auto prev = head;
+		prev->lock();
 		auto curr = prev->next;
+		curr->lock();
 
 		while (curr->value < x) {
 			prev = curr;
 			curr = curr->next;
 		}
 
-		prev->lock(); curr->lock();
 		if (curr->value == x) {
 			prev->unlock(); curr->unlock();
 			return true;
