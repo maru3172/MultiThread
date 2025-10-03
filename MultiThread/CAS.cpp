@@ -142,7 +142,7 @@ void CAS_Lock()
 
 void CAS_Unlock()
 {
-	lockFlag.store(false);
+	lockFlag = false;
 }
 
 void worker3(const int thread_id, const int loop_count)
