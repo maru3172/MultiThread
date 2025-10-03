@@ -5,282 +5,700 @@
 #include <vector>
 #include <numeric>
 #include <array>
+#include <memory>
 
 const int MAX_THREADS = 16;
 using namespace std::chrono;
 
-class DUMMY_MTX {
+class NODE_SP {
 public:
-	void lock() {}
-	void unlock() {}
-};
-
-class NODE {
-public:
-	NODE(int x) : next(nullptr), value(x), removed(false) {}
+	NODE_SP(int x) : next(nullptr), value(x), removed(false) {}
 
 	void lock() { mtx.lock(); }
 	void unlock() { mtx.unlock(); }
-	int value;
-	NODE* next;
+	std::shared_ptr<NODE_SP> next;
 	std::mutex mtx;
+	int value;
 	bool removed;
 };
 
 
+//class NODE {
+//public:
+//	NODE(int x) : next(nullptr), value(x), removed(false) {}
+//
+//	void lock() { mtx.lock(); }
+//	void unlock() { mtx.unlock(); }
+//	int value;
+//	NODE* next;
+//	std::mutex mtx;
+//	bool removed;
+//};
 
-class C_SET {
+//class C_SET {
+//public:
+//	C_SET() {
+//		head = new NODE(std::numeric_limits<int>::min());
+//		tail = new NODE(std::numeric_limits<int>::max());
+//		head->next = tail;
+//	}
+//
+//	~C_SET()
+//	{
+//		clear();
+//		delete head;
+//		delete tail;
+//	}
+//
+//	void clear()
+//	{
+//		NODE* curr = head->next;
+//		while (curr != tail) {
+//			NODE* temp = curr;
+//			curr = curr->next;
+//			delete temp;
+//		}
+//		head->next = tail;
+//	}
+//
+//	bool add(int x)
+//	{
+//		mtx.lock();
+//		auto prev = head;
+//		auto curr = prev->next;
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			mtx.unlock();
+//			return false;
+//		}
+//
+//		auto newNode = new NODE(x);
+//		newNode->next = curr;
+//		prev->next = newNode;
+//		mtx.unlock();
+//		return true;
+//	}
+//
+//	bool remove(int x)
+//	{
+//		mtx.lock();
+//		auto prev = head;
+//		auto curr = prev->next;
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			prev->next = curr->next;
+//			delete curr;
+//			mtx.unlock();
+//			return true;
+//		}
+//
+//		mtx.unlock();
+//		return false;
+//	}
+//
+//	bool contains(int x)
+//	{
+//		mtx.lock();
+//		auto prev = head;
+//		auto curr = prev->next;
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			mtx.unlock();
+//			return true;
+//		}
+//		mtx.unlock();
+//		return false;
+//	}
+//
+//	void print20()
+//	{
+//		auto curr = head->next;
+//		for (int i = 0; i < 20 && curr != tail; ++i) {
+//			std::cout << curr->value << ", ";
+//			curr = curr->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//private:
+//	NODE* head, * tail;
+//	std::mutex mtx;
+//};
+//
+//class F_SET {
+//public:
+//	F_SET() {
+//		head = new NODE(std::numeric_limits<int>::min());
+//		tail = new NODE(std::numeric_limits<int>::max());
+//		head->next = tail;
+//	}
+//
+//	~F_SET()
+//	{
+//		clear();
+//		delete head;
+//		delete tail;
+//	}
+//
+//	void clear()
+//	{
+//		NODE* curr = head->next;
+//		while (curr != tail) {
+//			NODE* temp = curr;
+//			curr = curr->next;
+//			delete temp;
+//		}
+//		head->next = tail;
+//	}
+//
+//	bool add(int x)
+//	{
+//		auto prev = head;
+//		prev->lock();
+//		auto curr = prev->next;
+//		curr->lock();
+//
+//		while (curr->value < x) {
+//			prev->unlock();
+//			prev = curr;
+//			curr = curr->next;
+//			curr->lock();
+//		}
+//		
+//		if (curr->value == x) {
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//
+//		auto newNode = new NODE(x);
+//		newNode->next = curr;
+//		prev->next = newNode;
+//		prev->unlock(); curr->unlock();
+//		return true;
+//	}
+//
+//	bool remove(int x)
+//	{
+//		auto prev = head;
+//		prev->lock();
+//		auto curr = prev->next;
+//		curr->lock();
+//
+//		while (curr->value < x) {
+//			prev->unlock();
+//			prev = curr;
+//			curr = curr->next;
+//			curr->lock();
+//		}
+//		
+//		if (curr->value == x) {
+//			prev->lock(); curr->lock();
+//			prev->next = curr->next;
+//			prev->unlock(); curr->unlock();
+//			delete curr;
+//			return true;
+//		}
+//
+//		return false;
+//	}
+//
+//	bool contains(int x)
+//	{
+//		auto prev = head;
+//		prev->lock();
+//		auto curr = prev->next;
+//		curr->lock();
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			prev->unlock(); curr->unlock();
+//			return true;
+//		}
+//		prev->unlock(); curr->unlock();
+//		return false;
+//	}
+//
+//	void print20()
+//	{
+//		auto curr = head->next;
+//		for (int i = 0; i < 20 && curr != tail; ++i) {
+//			std::cout << curr->value << ", ";
+//			curr = curr->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//private:
+//	bool validate(NODE* prev, NODE* curr)
+//	{
+//		NODE* node = prev;
+//		while (node) {
+//			if (node == prev)
+//				return prev->next == curr;
+//			node = node->next;
+//		}
+//		return false;
+//	}
+//
+//	NODE* head, * tail;
+//};
+//
+//class O_SET {
+//public:
+//	O_SET() {
+//		head = new NODE(std::numeric_limits<int>::min());
+//		tail = new NODE(std::numeric_limits<int>::max());
+//		head->next = tail;
+//	}
+//
+//	~O_SET()
+//	{
+//		clear();
+//		delete head;
+//		delete tail;
+//	}
+//
+//	void clear()
+//	{
+//		NODE* curr = head->next;
+//		while (curr != tail) {
+//			NODE* temp = curr;
+//			curr = curr->next;
+//			delete temp;
+//		}
+//		head->next = tail;
+//	}
+//
+//	bool add(int x)
+//	{
+//		while (true)
+//		{
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//			if (curr->value == x) {
+//				prev->unlock(); curr->unlock();
+//				return false;
+//			}
+//
+//			auto newNode = new NODE(x);
+//			newNode->next = curr;
+//			prev->next = newNode;
+//			prev->unlock(); curr->unlock();
+//			return true;
+//		}
+//	}
+//
+//	bool remove(int x)
+//	{
+//		while (true)
+//		{
+//
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//
+//			if (curr->value == x) {
+//				prev->next = curr->next;
+//				prev->unlock(); curr->unlock();
+//				// delete curr;
+//				return true;
+//			}
+//
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//	}
+//
+//	bool contains(int x)
+//	{
+//		while (true)
+//		{
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//
+//			if (curr->value == x) {
+//				prev->unlock(); curr->unlock();
+//				return true;
+//			}
+//
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//	}
+//
+//	void print20()
+//	{
+//		auto curr = head->next;
+//		for (int i = 0; i < 20 && curr != tail; ++i) {
+//			std::cout << curr->value << ", ";
+//			curr = curr->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//	bool validate(int x, NODE* p, NODE* c)
+//	{
+//		auto prev = head;
+//		auto curr = prev->next;
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//		return ((prev == p) && (curr == c));
+//	}
+//
+//private:
+//	NODE* head, * tail;
+//};
+//
+//class L_SET {
+//public:
+//	L_SET() {
+//		head = new NODE(std::numeric_limits<int>::min());
+//		tail = new NODE(std::numeric_limits<int>::max());
+//		head->next = tail;
+//	}
+//
+//	~L_SET()
+//	{
+//		clear();
+//		delete head;
+//		delete tail;
+//	}
+//
+//	void clear()
+//	{
+//		NODE* curr = head->next;
+//		while (curr != tail) {
+//			NODE* temp = curr;
+//			curr = curr->next;
+//			delete temp;
+//		}
+//		head->next = tail;
+//	}
+//
+//	bool add(int x)
+//	{
+//		while (true)
+//		{
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//			if (curr->value == x) {
+//				prev->unlock(); curr->unlock();
+//				return false;
+//			}
+//
+//			auto newNode = new NODE(x);
+//			newNode->next = curr;
+//			prev->next = newNode;
+//			prev->unlock(); curr->unlock();
+//			return true;
+//		}
+//	}
+//
+//	bool remove(int x)
+//	{
+//		while (true)
+//		{
+//
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//
+//			if (curr->value == x) {
+//				prev->next = curr->next;
+//				prev->unlock(); curr->unlock();
+//				// delete curr;
+//				return true;
+//			}
+//
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//	}
+//
+//	bool contains(int x)
+//	{
+//		while (true)
+//		{
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//
+//			if (curr->value == x) {
+//				prev->unlock(); curr->unlock();
+//				return true;
+//			}
+//
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//	}
+//
+//	void print20()
+//	{
+//		auto curr = head->next;
+//		for (int i = 0; i < 20 && curr != tail; ++i) {
+//			std::cout << curr->value << ", ";
+//			curr = curr->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//	bool validate(int x, NODE* p, NODE* c)
+//	{
+//		return (p->removed == false) && (c->removed == false) && (p->next == c);
+//	}
+//
+//private:
+//	NODE* head, * tail;
+//};
+
+#include <queue>
+
+//class L_SET_FL {
+//public:
+//	void my_delete(NODE* node)
+//	{
+//		std::lock_guard<std::mutex> lg(fl_mtx);
+//		free_list.push(node);
+//	}
+//
+//	void recycle()
+//	{
+//
+//	}
+//
+//	L_SET_FL() {
+//		head = new NODE(std::numeric_limits<int>::min());
+//		tail = new NODE(std::numeric_limits<int>::max());
+//		head->next = tail;
+//	}
+//
+//	~L_SET_FL()
+//	{
+//		clear();
+//		delete head;
+//		delete tail;
+//	}
+//
+//	void clear()
+//	{
+//		NODE* curr = head->next;
+//		while (curr != tail) {
+//			NODE* temp = curr;
+//			curr = curr->next;
+//			delete temp;
+//		}
+//		head->next = tail;
+//	}
+//
+//	bool add(int x)
+//	{
+//		while (true)
+//		{
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//			if (curr->value == x) {
+//				prev->unlock(); curr->unlock();
+//				return false;
+//			}
+//
+//			auto newNode = new NODE(x);
+//			newNode->next = curr;
+//			prev->next = newNode;
+//			prev->unlock(); curr->unlock();
+//			return true;
+//		}
+//	}
+//
+//	bool remove(int x)
+//	{
+//		while (true)
+//		{
+//
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//
+//			if (curr->value == x) {
+//				curr->removed = false;
+//				prev->next = curr->next;
+//				prev->unlock(); curr->unlock();
+//				my_delete(curr);
+//				return true;
+//			}
+//
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//	}
+//
+//	bool contains(int x)
+//	{
+//		while (true)
+//		{
+//			auto prev = head;
+//			auto curr = prev->next;
+//
+//			while (curr->value < x) {
+//				prev = curr;
+//				curr = curr->next;
+//			}
+//			prev->lock(); curr->lock();
+//			if (false == validate(x, prev, curr)) {
+//				prev->unlock(); curr->unlock();
+//				continue;
+//			}
+//
+//			if (curr->value == x) {
+//				prev->unlock(); curr->unlock();
+//				return true;
+//			}
+//
+//			prev->unlock(); curr->unlock();
+//			return false;
+//		}
+//	}
+//
+//	void print20()
+//	{
+//		auto curr = head->next;
+//		for (int i = 0; i < 20 && curr != tail; ++i) {
+//			std::cout << curr->value << ", ";
+//			curr = curr->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//	bool validate(int x, NODE* p, NODE* c)
+//	{
+//		return (p->removed == false) && (c->removed == false) && (p->next == c);
+//	}
+//
+//private:
+//	NODE* head, * tail;
+//	std::queue<NODE*> free_list;
+//	std::mutex fl_mtx;
+//};
+
+class L_SET_SP {
 public:
-	C_SET() {
-		head = new NODE(std::numeric_limits<int>::min());
-		tail = new NODE(std::numeric_limits<int>::max());
+
+	L_SET_SP() {
+		head = std::make_shared<NODE_SP>(std::numeric_limits<int>::min());
+		tail = std::make_shared<NODE_SP>(std::numeric_limits<int>::max());
 		head->next = tail;
 	}
 
-	~C_SET()
+	~L_SET_SP()
 	{
 		clear();
-		delete head;
-		delete tail;
 	}
 
 	void clear()
 	{
-		NODE* curr = head->next;
-		while (curr != tail) {
-			NODE* temp = curr;
-			curr = curr->next;
-			delete temp;
-		}
-		head->next = tail;
-	}
-
-	bool add(int x)
-	{
-		mtx.lock();
-		auto prev = head;
-		auto curr = prev->next;
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			mtx.unlock();
-			return false;
-		}
-
-		auto newNode = new NODE(x);
-		newNode->next = curr;
-		prev->next = newNode;
-		mtx.unlock();
-		return true;
-	}
-
-	bool remove(int x)
-	{
-		mtx.lock();
-		auto prev = head;
-		auto curr = prev->next;
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			prev->next = curr->next;
-			delete curr;
-			mtx.unlock();
-			return true;
-		}
-
-		mtx.unlock();
-		return false;
-	}
-
-	bool contains(int x)
-	{
-		mtx.lock();
-		auto prev = head;
-		auto curr = prev->next;
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			mtx.unlock();
-			return true;
-		}
-		mtx.unlock();
-		return false;
-	}
-
-	void print20()
-	{
-		auto curr = head->next;
-		for (int i = 0; i < 20 && curr != tail; ++i) {
-			std::cout << curr->value << ", ";
-			curr = curr->next;
-		}
-		std::cout << std::endl;
-	}
-
-private:
-	NODE* head, * tail;
-	std::mutex mtx;
-};
-
-
-
-class F_SET {
-public:
-	F_SET() {
-		head = new NODE(std::numeric_limits<int>::min());
-		tail = new NODE(std::numeric_limits<int>::max());
-		head->next = tail;
-	}
-
-	~F_SET()
-	{
-		clear();
-		delete head;
-		delete tail;
-	}
-
-	void clear()
-	{
-		NODE* curr = head->next;
-		while (curr != tail) {
-			NODE* temp = curr;
-			curr = curr->next;
-			delete temp;
-		}
-		head->next = tail;
-	}
-
-	bool add(int x)
-	{
-		auto prev = head;
-		prev->lock();
-		auto curr = prev->next;
-		curr->lock();
-
-		while (curr->value < x) {
-			prev->unlock();
-			prev = curr;
-			curr = curr->next;
-			curr->lock();
-		}
-		
-		if (curr->value == x) {
-			prev->unlock(); curr->unlock();
-			return false;
-		}
-
-		auto newNode = new NODE(x);
-		newNode->next = curr;
-		prev->next = newNode;
-		prev->unlock(); curr->unlock();
-		return true;
-	}
-
-	bool remove(int x)
-	{
-		auto prev = head;
-		prev->lock();
-		auto curr = prev->next;
-		curr->lock();
-
-		while (curr->value < x) {
-			prev->unlock();
-			prev = curr;
-			curr = curr->next;
-			curr->lock();
-		}
-		
-		if (curr->value == x) {
-			prev->lock(); curr->lock();
-			prev->next = curr->next;
-			prev->unlock(); curr->unlock();
-			delete curr;
-			return true;
-		}
-
-		return false;
-	}
-
-	bool contains(int x)
-	{
-		auto prev = head;
-		prev->lock();
-		auto curr = prev->next;
-		curr->lock();
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			prev->unlock(); curr->unlock();
-			return true;
-		}
-		prev->unlock(); curr->unlock();
-		return false;
-	}
-
-	void print20()
-	{
-		auto curr = head->next;
-		for (int i = 0; i < 20 && curr != tail; ++i) {
-			std::cout << curr->value << ", ";
-			curr = curr->next;
-		}
-		std::cout << std::endl;
-	}
-
-private:
-	bool validate(NODE* prev, NODE* curr)
-	{
-		NODE* node = prev;
-		while (node) {
-			if (node == prev)
-				return prev->next == curr;
-			node = node->next;
-		}
-		return false;
-	}
-
-	NODE* head, * tail;
-};
-
-class O_SET {
-public:
-	O_SET() {
-		head = new NODE(std::numeric_limits<int>::min());
-		tail = new NODE(std::numeric_limits<int>::max());
-		head->next = tail;
-	}
-
-	~O_SET()
-	{
-		clear();
-		delete head;
-		delete tail;
-	}
-
-	void clear()
-	{
-		NODE* curr = head->next;
-		while (curr != tail) {
-			NODE* temp = curr;
-			curr = curr->next;
-			delete temp;
-		}
 		head->next = tail;
 	}
 
@@ -297,7 +715,7 @@ public:
 			}
 
 			prev->lock(); curr->lock();
-			if (false == validate(x, prev, curr)) {
+			if (false == validate(prev, curr)) {
 				prev->unlock(); curr->unlock();
 				continue;
 			}
@@ -306,7 +724,7 @@ public:
 				return false;
 			}
 
-			auto newNode = new NODE(x);
+			auto newNode = std::make_shared<NODE_SP>(x);
 			newNode->next = curr;
 			prev->next = newNode;
 			prev->unlock(); curr->unlock();
@@ -318,7 +736,6 @@ public:
 	{
 		while (true)
 		{
-
 			auto prev = head;
 			auto curr = prev->next;
 
@@ -328,146 +745,7 @@ public:
 			}
 
 			prev->lock(); curr->lock();
-			if (false == validate(x, prev, curr)) {
-				prev->unlock(); curr->unlock();
-				continue;
-			}
-
-			if (curr->value == x) {
-				prev->next = curr->next;
-				prev->unlock(); curr->unlock();
-				// delete curr;
-				return true;
-			}
-
-			prev->unlock(); curr->unlock();
-			return false;
-		}
-	}
-
-	bool contains(int x)
-	{
-		while (true)
-		{
-			auto prev = head;
-			auto curr = prev->next;
-
-			while (curr->value < x) {
-				prev = curr;
-				curr = curr->next;
-			}
-			prev->lock(); curr->lock();
-			if (false == validate(x, prev, curr)) {
-				prev->unlock(); curr->unlock();
-				continue;
-			}
-
-			if (curr->value == x) {
-				prev->unlock(); curr->unlock();
-				return true;
-			}
-
-			prev->unlock(); curr->unlock();
-			return false;
-		}
-	}
-
-	void print20()
-	{
-		auto curr = head->next;
-		for (int i = 0; i < 20 && curr != tail; ++i) {
-			std::cout << curr->value << ", ";
-			curr = curr->next;
-		}
-		std::cout << std::endl;
-	}
-
-	bool validate(int x, NODE* p, NODE* c)
-	{
-		auto prev = head;
-		auto curr = prev->next;
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-		return ((prev == p) && (curr == c));
-	}
-
-private:
-	NODE* head, * tail;
-};
-
-class L_SET {
-public:
-	L_SET() {
-		head = new NODE(std::numeric_limits<int>::min());
-		tail = new NODE(std::numeric_limits<int>::max());
-		head->next = tail;
-	}
-
-	~L_SET()
-	{
-		clear();
-		delete head;
-		delete tail;
-	}
-
-	void clear()
-	{
-		NODE* curr = head->next;
-		while (curr != tail) {
-			NODE* temp = curr;
-			curr = curr->next;
-			delete temp;
-		}
-		head->next = tail;
-	}
-
-	bool add(int x)
-	{
-		while (true)
-		{
-			auto prev = head;
-			auto curr = prev->next;
-
-			while (curr->value < x) {
-				prev = curr;
-				curr = curr->next;
-			}
-
-			prev->lock(); curr->lock();
-			if (false == validate(x, prev, curr)) {
-				prev->unlock(); curr->unlock();
-				continue;
-			}
-			if (curr->value == x) {
-				prev->unlock(); curr->unlock();
-				return false;
-			}
-
-			auto newNode = new NODE(x);
-			newNode->next = curr;
-			prev->next = newNode;
-			prev->unlock(); curr->unlock();
-			return true;
-		}
-	}
-
-	bool remove(int x)
-	{
-		while (true)
-		{
-
-			auto prev = head;
-			auto curr = prev->next;
-
-			while (curr->value < x) {
-				prev = curr;
-				curr = curr->next;
-			}
-
-			prev->lock(); curr->lock();
-			if (false == validate(x, prev, curr)) {
+			if (false == validate(prev, curr)) {
 				prev->unlock(); curr->unlock();
 				continue;
 			}
@@ -476,7 +754,6 @@ public:
 				curr->removed = true;
 				prev->next = curr->next;
 				prev->unlock(); curr->unlock();
-				// delete curr;
 				return true;
 			}
 
@@ -497,7 +774,7 @@ public:
 				curr = curr->next;
 			}
 			prev->lock(); curr->lock();
-			if (false == validate(x, prev, curr)) {
+			if (false == validate(prev, curr)) {
 				prev->unlock(); curr->unlock();
 				continue;
 			}
@@ -522,17 +799,16 @@ public:
 		std::cout << std::endl;
 	}
 
-	bool validate(int x, NODE* p, NODE* c)
+	bool validate(const std::shared_ptr<NODE_SP>& p, const std::shared_ptr<NODE_SP>& c)
 	{
 		return (p->removed == false) && (c->removed == false) && (p->next == c);
 	}
 
 private:
-	NODE* head, * tail;
+	std::shared_ptr<NODE_SP> head, tail;
 };
 
-
-L_SET set;
+L_SET_SP set;
 
 const int LOOP = 400'0000;
 const int RANGE = 1000;
@@ -630,37 +906,44 @@ void benchmark_check(int num_threads, int th_id)
 int main()
 {
 	using namespace std::chrono;
-	for (int num_thread = MAX_THREADS; num_thread >= 1; num_thread /= 2) {
+	//for (int num_thread = MAX_THREADS; num_thread >= 1; num_thread /= 2) {
+	{
 		set.clear();
-		std::vector<std::thread> threads;
+		//std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
-		for (int i = 0; i < num_thread; ++i)
-			threads.emplace_back(benchmark, num_thread);
-		for (auto& th : threads)
-			th.join();
+		//for (int i = 0; i < num_thread; ++i)
+		//	threads.emplace_back(benchmark, 1);
+		//for (auto& th : threads)
+		//	th.join();
+		benchmark_check(1, 0);
+		check_history(1);
 		auto end = high_resolution_clock::now();
 		auto duration = duration_cast<milliseconds>(end - start);
 
-		std::cout << "Threads: " << num_thread << ", Duration: " << duration.count() << "ms.\n";
+		std::cout << "Threads: " << 1 << ", Duration: " << duration.count() << "ms.\n";
 		std::cout << "Set : "; set.print20();
+		//}
 	}
 
 	std::cout << "\n\nConsistency Check\n";
-	for (int num_thread = MAX_THREADS; num_thread >= 1; num_thread /= 2) {
+	//for (int num_thread = MAX_THREADS; num_thread >= 1; num_thread /= 2) {
+	{
 		set.clear();
-		std::vector<std::thread> threads;
-		for (int i = 0; i < MAX_THREADS; ++i)
-			history[i].clear();
+		for (auto& h : history)
+			h.clear();
+		//std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
-		for (int i = 0; i < num_thread; ++i)
-			threads.emplace_back(benchmark_check, num_thread, i);
-		for (auto& th : threads)
-			th.join();
-		auto stop = high_resolution_clock::now();
-		auto duration = duration_cast<milliseconds>(stop - start);
-		std::cout << "Threads: " << num_thread
-			<< ", Duration: " << duration.count() << " ms.\n";
-		std::cout << "Set: "; set.print20();
-		check_history(num_thread);
+		//for (int i = 0; i < num_thread; ++i)
+		//	threads.emplace_back(benchmark, num_thread);
+		//for (auto& th : threads)
+		//	th.join();
+		benchmark_check(1, 0);
+		check_history(1);
+		auto end = high_resolution_clock::now();
+		auto duration = duration_cast<milliseconds>(end - start);
+
+		std::cout << "Threads: " << 1 << ", Duration: " << duration.count() << "ms.\n";
+		std::cout << "Set : "; set.print20();
 	}
+	//}
 }
