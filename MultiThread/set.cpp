@@ -5,6 +5,7 @@
 #include <vector>
 #include <numeric>
 #include <array>
+#include <set>
 
 const int MAX_THREADS = 16;
 using namespace std::chrono;
@@ -31,112 +32,6 @@ public:
 	NODE* next;
 	std::mutex mtx;
 	bool removed;
-};
-
-
-class C_SET {
-public:
-	C_SET() {
-		head = new NODE(std::numeric_limits<int>::min());
-		tail = new NODE(std::numeric_limits<int>::max());
-		head->next = tail;
-	}
-
-	~C_SET()
-	{
-		clear();
-		delete head;
-		delete tail;
-	}
-
-	void clear()
-	{
-		NODE* curr = head->next;
-		while (curr != tail) {
-			NODE* temp = curr;
-			curr = curr->next;
-			delete temp;
-		}
-		head->next = tail;
-	}
-
-	bool add(int x)
-	{
-		mtx.lock();
-		auto prev = head;
-		auto curr = prev->next;
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			mtx.unlock();
-			return false;
-		}
-
-		auto newNode = new NODE(x);
-		newNode->next = curr;
-		prev->next = newNode;
-		mtx.unlock();
-		return true;
-	}
-
-	bool remove(int x)
-	{
-		mtx.lock();
-		auto prev = head;
-		auto curr = prev->next;
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			prev->next = curr->next;
-			delete curr;
-			mtx.unlock();
-			return true;
-		}
-
-		mtx.unlock();
-		return false;
-	}
-
-	bool contains(int x)
-	{
-		mtx.lock();
-		auto prev = head;
-		auto curr = prev->next;
-
-		while (curr->value < x) {
-			prev = curr;
-			curr = curr->next;
-		}
-
-		if (curr->value == x) {
-			mtx.unlock();
-			return true;
-		}
-		mtx.unlock();
-		return false;
-	}
-
-	void print20()
-	{
-		auto curr = head->next;
-		for (int i = 0; i < 20 && curr != tail; ++i) {
-			std::cout << curr->value << ", ";
-			curr = curr->next;
-		}
-		std::cout << std::endl;
-	}
-
-private:
-	NODE* head, * tail;
-	std::mutex mtx;
 };
 
 class F_SET {
@@ -852,10 +747,218 @@ private:
 	EBR ebr;
 };
 
+enum INVO_OP
+{
+	ADD = 0,
+	REMOVE = 1,
+	CONTAINS = 2
+};
 
-LF_SET_EBR set;
+class INVOCATION {
+public:
+	INVO_OP op;
+	int value;
+	INVOCATION(INVO_OP o, int v) : op(o), value(v) {}
+};
 
-const int LOOP = 400'0000;
+typedef bool RESPONSE;
+
+// 싱글쓰레드 통합 API
+class SEQ_SET {
+public:
+	RESPONSE apply(INVOCATION inv)
+	{
+		switch (inv.op) {
+		case ADD:
+			return m_set.insert(inv.value).second;
+		case REMOVE:
+			return (m_set.erase(inv.value) > 0);
+		case CONTAINS:
+			return (m_set.find(inv.value) != m_set.end());
+		default:
+			return false;
+		}
+	}
+
+	void clear()
+	{
+		m_set.clear();
+	}
+
+	void print20()
+	{
+		int count = 0;
+		for (const auto& v : m_set) {
+			std::cout << v << ", ";
+			++count;
+			if (count > 20)
+				break;
+		}
+		std::cout << std::endl;
+	}
+private:
+	std::set<int> m_set;
+};
+
+class DUMMY_MTX {
+public:
+	void lock() {}
+	void unlock() {}
+};
+
+class LNODE;
+
+class CONSENSUS {
+public:
+	LNODE* decide(LNODE* v) {
+		CAS(&value, nullptr, v);
+		return value;
+	}
+
+	void CAS(LNODE** addr, LNODE* expected, LNODE* update) {
+		std::atomic_compare_exchange_strong(reinterpret_cast<std::atomic<LNODE*>*>(addr), &expected, update);
+	}
+
+	void clear() {
+		value = nullptr;
+	}
+private:
+	LNODE* value{ nullptr };
+};
+
+class LNODE {
+public:
+	LNODE(INVOCATION inv) : m_inv(inv), m_seq(0), m_next(nullptr) {}
+
+	int m_seq;
+	LNODE* m_next;
+	CONSENSUS decide_next;
+	INVOCATION m_inv;
+};
+
+class LFU_SET {
+public:
+	LFU_SET() {
+		tail = new LNODE(INVOCATION(CONTAINS, 0));
+		for (int i = 0; i < MAX_THREADS; ++i) {
+			head[i] = tail;
+		}
+	}
+
+	~LFU_SET() {
+		while (nullptr != tail) {
+
+		}
+	}
+
+	RESPONSE apply(INVOCATION inv) {
+		int i = thread_id;
+		auto prefer = new LNODE(inv);
+		while (prefer->m_seq == 0) {
+			LNODE* before = max_head();
+			LNODE* after = before->decide_next.decide(prefer);
+			before->m_next = after;
+			after->m_seq = before->m_seq + 1;
+			head[i] = after;
+		}
+
+		SEQ_SET seq_set;
+		LNODE* curr = tail->m_next;
+		while (curr != prefer) {
+			seq_set.apply(curr->m_inv);
+			curr = curr->m_next;
+		}
+		return seq_set.apply(inv);
+	}
+
+	LNODE* max_head() {
+		LNODE* max_node = head[0];
+		for (int i = 1; i < num_threads; ++i) {
+			if (max_node->m_seq < head[i]->m_seq)
+				max_node = head[i];
+		}
+		return max_node;
+	}
+
+	void clear() {
+		for (int i = 0; i < num_threads; ++i) {
+			head[i] = tail;
+		}
+		LNODE* curr = tail->m_next;
+		while (nullptr != curr) {
+			LNODE* temp = curr;
+			curr = curr->m_next;
+			delete temp;
+		}
+		tail->m_next = nullptr;
+		tail->decide_next.clear();
+	}
+
+	void print20() {
+		SEQ_SET seq_set;
+		LNODE* curr = tail->m_next;
+		while (nullptr != curr) {
+			seq_set.apply(curr->m_inv);
+			curr = curr->m_next;
+		}
+		seq_set.print20();
+	}
+
+private:
+	LNODE* head[MAX_THREADS];
+	LNODE* tail;
+};
+
+class STD_SET {
+public:
+	STD_SET() {}
+
+	~STD_SET(){}
+
+	void clear()
+	{
+		m_set.clear();
+	}
+
+	bool add(int x)
+	{
+		mtx.lock();
+		auto res = m_set.apply(INVOCATION(ADD, x));
+		mtx.unlock();
+		return res;
+	}
+
+	bool remove(int x)
+	{
+		mtx.lock();
+		auto res = m_set.apply(INVOCATION(REMOVE, x));
+		mtx.unlock();
+		return res;
+	}
+
+	bool contains(int x)
+	{
+		mtx.lock();
+		auto res = m_set.apply(INVOCATION(CONTAINS, x));
+		mtx.unlock();
+		return res;
+	}
+
+	void print20()
+	{
+		m_set.print20();
+	}
+
+private:
+	LFU_SET m_set;
+	DUMMY_MTX mtx;
+};
+
+
+
+STD_SET set;
+
+const int LOOP = 1'0000;
 const int RANGE = 1000;
 
 class HISTORY {
