@@ -7,7 +7,7 @@
 #include <array>
 #include <set>
 
-const int MAX_THREADS = 16;
+const int MAX_THREADS = 32;
 using namespace std::chrono;
 
 class NODE {
@@ -586,11 +586,13 @@ public:
 
 			if (curr->value == x)
 				return false;
-
-			auto newNode = new LF_NODE(x);
-			newNode->next = curr;
-			if(prev->next.CAS(curr, newNode, false, false))
-				return true;
+			else {
+				auto newNode = new LF_NODE(x);
+				newNode->next = curr;
+				if (prev->next.CAS(curr, newNode, false, false))
+					return true;
+				else delete newNode;
+			}
 		}
 	}
 
@@ -601,28 +603,24 @@ public:
 			LF_NODE* prev, * curr;
 			find(prev, curr, x);
 
-			if (curr->value == x) {
-				if (!curr->next.attempt_mark(curr->next.get_ptr(), true))
+			if(curr->value != x)
+				return false;
+			else{
+				auto succ = curr->next.get_ptr();
+				if (false == curr->next.attempt_mark(succ, true))
 					continue;
-				if (prev->next.CAS(curr, curr->next.get_ptr(), false, false))
-					return true;
+				prev->next.CAS(curr, succ, false, false);
+				return true;
 			}
-			return false;
 		}
 	}
 
 	bool contains(int x)
 	{
-		while (true)
-		{
-			LF_NODE* prev, * curr;
-			find(prev, curr, x);
-
-			if (curr->value == x && !curr->next.get_mark()) {
-				return true;
-			}
-			return false;
-		}
+		auto curr = head->next.get_ptr();
+		while (curr->value < x)
+			curr = curr->next.get_ptr();
+		return (curr->value == x) && (curr->next.get_mark() == false);
 	}
 
 	void print20()
@@ -788,11 +786,9 @@ public:
 	void print20()
 	{
 		int count = 0;
-		for (const auto& v : m_set) {
+		for (auto& v : m_set) {
 			std::cout << v << ", ";
-			++count;
-			if (count > 20)
-				break;
+			if (++count >= 20) break;
 		}
 		std::cout << std::endl;
 	}
@@ -847,7 +843,9 @@ public:
 
 	~LFU_SET() {
 		while (nullptr != tail) {
-
+			LNODE* temp = tail;
+			tail = tail->m_next;
+			delete temp;
 		}
 	}
 
@@ -909,6 +907,91 @@ private:
 	LNODE* tail;
 };
 
+class WFU_SET {
+public:
+	WFU_SET() {
+		tail = new LNODE(INVOCATION(CONTAINS, 0));
+		tail->m_seq = 1;
+		for (int i = 0; i < MAX_THREADS; ++i) {
+			head[i] = tail;
+			announce[i] = tail;
+		}
+	}
+
+	~WFU_SET() {
+		while (nullptr != tail) {
+			LNODE* temp = tail;
+			tail = tail->m_next;
+			delete temp;
+		}
+	}
+
+	RESPONSE apply(INVOCATION inv) {
+		int i = thread_id;
+		announce[i] = new LNODE(inv);
+		head[i] = max_head();
+		while (announce[i]->m_seq == 0) {
+			LNODE* before = head[i];
+			LNODE* help = announce[((before->m_seq + 1) % MAX_THREADS)];
+			LNODE* prefer;
+			if (help->m_seq == 0) prefer = help;
+			else prefer = announce[i];
+			LNODE* after = before->decide_next.decide(prefer);
+			before->m_next = after;
+			after->m_seq = before->m_seq + 1;
+			head[i] = after;
+		}
+
+		SEQ_SET seq_set;
+		LNODE* curr = tail->m_next;
+		while (curr != announce[i]) {
+			seq_set.apply(curr->m_inv);
+			curr = curr->m_next;
+		}
+		head[i] = announce[i];
+		return seq_set.apply(inv);
+	}
+
+	LNODE* max_head() {
+		LNODE* max_node = head[0];
+		for (int i = 1; i < num_threads; ++i) {
+			if (max_node->m_seq < head[i]->m_seq)
+				max_node = head[i];
+		}
+		return max_node;
+	}
+
+	void clear() {
+		for (int i = 0; i < MAX_THREADS; ++i) {
+			head[i] = tail;
+			announce[i] = tail;
+		}
+		LNODE* curr = tail->m_next;
+		while (nullptr != curr) {
+			LNODE* temp = curr;
+			curr = curr->m_next;
+			delete temp;
+		}
+		tail->m_next = nullptr;
+		tail->decide_next.clear();
+	}
+
+	void print20() {
+		SEQ_SET seq_set;
+		LNODE* curr = tail->m_next;
+		while (nullptr != curr) {
+			seq_set.apply(curr->m_inv);
+			curr = curr->m_next;
+		}
+		seq_set.print20();
+	}
+
+private:
+	LNODE* announce[MAX_THREADS];
+	LNODE* head[MAX_THREADS];
+	LNODE* tail;
+};
+
 class STD_SET {
 public:
 	STD_SET() {}
@@ -950,7 +1033,7 @@ public:
 	}
 
 private:
-	LFU_SET m_set;
+	WFU_SET m_set;
 	DUMMY_MTX mtx;
 };
 
@@ -973,7 +1056,6 @@ std::array<std::vector<HISTORY>, MAX_THREADS> history;
 
 void check_history(int num_threads)
 {
-	thread_id = num_threads;
 	std::array <int, RANGE> survive = {};
 	std::cout << "Checking Consistency : ";
 	if (history[0].size() == 0) {
@@ -1017,10 +1099,7 @@ void check_history(int num_threads)
 void benchmark(const int num_threads, int th_id)
 {
 	thread_id = th_id;
-	const int LOOP = 4000000 / num_threads;
-	const int RANGE = 1000;
-
-	for (int i = 0; i < LOOP; ++i) {
+	for (int i = 0; i < LOOP / num_threads; ++i) {
 		int value = rand() % RANGE;
 		int op = rand() % 3;
 		if (op == 0) set.add(value);
@@ -1057,7 +1136,28 @@ void benchmark_check(int num_threads, int th_id)
 int main()
 {
 	using namespace std::chrono;
-	for (num_threads = MAX_THREADS; num_threads >= 1; num_threads /= 2) {
+
+	std::cout << "Consistency Check\n";
+	for (num_threads = 1; num_threads <= MAX_THREADS; num_threads *= 2) {
+		set.clear();
+		std::vector<std::thread> threads;
+		for (int i = 0; i < MAX_THREADS; ++i)
+			history[i].clear();
+		auto start = high_resolution_clock::now();
+		for (int i = 0; i < num_threads; ++i)
+			threads.emplace_back(benchmark_check, num_threads, i);
+		for (auto& th : threads)
+			th.join();
+		auto stop = high_resolution_clock::now();
+		auto duration = duration_cast<milliseconds>(stop - start);
+		std::cout << "Threads: " << num_threads
+			<< ", Duration: " << duration.count() << " ms.\n";
+		std::cout << "Set: "; set.print20();
+		check_history(num_threads);
+	}
+
+	std::cout << "\nBenchmarking\n";
+	for (num_threads = 1; num_threads <= MAX_THREADS; num_threads *= 2) {
 		set.clear();
 		std::vector<std::thread> threads;
 		auto start = high_resolution_clock::now();
@@ -1072,21 +1172,4 @@ int main()
 		std::cout << "Set : "; set.print20();
 	}
 
-	std::cout << "\n\nConsistency Check\n";
-	for (num_threads = MAX_THREADS; num_threads >= 1; num_threads /= 2) {
-		set.clear();
-		for (auto& h : history)
-			h.clear();
-		std::vector<std::thread> threads;
-		auto start = high_resolution_clock::now();
-		for (int i = 0; i < num_threads; ++i)
-			threads.emplace_back(benchmark, num_threads, i);
-		for (auto& th : threads)
-			th.join();
-		auto end = high_resolution_clock::now();
-		auto duration = duration_cast<milliseconds>(end - start);
-
-		std::cout << "Threads: " << num_threads << ", Duration: " << duration.count() << "ms.\n";
-		std::cout << "Set : "; set.print20();
-	}
 }
