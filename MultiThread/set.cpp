@@ -10,6 +10,118 @@
 const int MAX_THREADS = 32;
 using namespace std::chrono;
 
+//class NODE {
+//public:
+//	NODE(int x) : next(nullptr), value(x) {}
+//	int value;
+//	NODE* next;
+//};
+//
+//class C_SET {
+//public:
+//	C_SET() {
+//		head = new NODE(std::numeric_limits<int>::min());
+//		tail = new NODE(std::numeric_limits<int>::max());
+//		head->next = tail;
+//	}
+//
+//	~C_SET()
+//	{
+//		clear();
+//		delete head;
+//		delete tail;
+//	}
+//
+//	void clear()
+//	{
+//		NODE* curr = head->next;
+//		while (curr != tail) {
+//			NODE* temp = curr;
+//			curr = curr->next;
+//			delete temp;
+//		}
+//		head->next = tail;
+//	}
+//
+//	bool add(int x)
+//	{
+//		mtx.lock();
+//		auto prev = head;
+//		auto curr = prev->next;
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			mtx.unlock();
+//			return false;
+//		}
+//
+//		auto newNode = new NODE(x);
+//		newNode->next = curr;
+//		prev->next = newNode;
+//		mtx.unlock();
+//		return true;
+//	}
+//
+//	bool remove(int x)
+//	{
+//		mtx.lock();
+//		auto prev = head;
+//		auto curr = prev->next;
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			prev->next = curr->next;
+//			delete curr;
+//			mtx.unlock();
+//			return true;
+//		}
+//
+//		mtx.unlock();
+//		return false;
+//	}
+//
+//	bool contains(int x)
+//	{
+//		mtx.lock();
+//		auto prev = head;
+//		auto curr = prev->next;
+//
+//		while (curr->value < x) {
+//			prev = curr;
+//			curr = curr->next;
+//		}
+//
+//		if (curr->value == x) {
+//			mtx.unlock();
+//			return true;
+//		}
+//		mtx.unlock();
+//		return false;
+//	}
+//
+//	void print20()
+//	{
+//		auto curr = head->next;
+//		for (int i = 0; i < 20 && curr != tail; ++i) {
+//			std::cout << curr->value << ", ";
+//			curr = curr->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//private:
+//	NODE* head, * tail;
+//	std::mutex mtx;
+//};
+
 class NODE {
 public:
 	NODE(int x) : next(nullptr), value(x), removed(false) {}
