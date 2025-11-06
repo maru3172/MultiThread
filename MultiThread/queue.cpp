@@ -1,105 +1,180 @@
-#include <iostream>
 #include <thread>
-#include <mutex>
-#include <chrono>
+#include <iostream>
 #include <vector>
-#include <numeric>
-#include <array>
+#include <chrono>
+#include <mutex>
 
+const int MAX_THREADS = 16;
 class NODE {
 public:
 	NODE(int x) : next(nullptr), value(x) {}
 
 	int value;
-	NODE* next;
+	NODE* volatile next;
 };
 
-class CE_QUEUE {
+class DUMMY_MUTEX {
 public:
-	CE_QUEUE()
+	void lock() {}
+	void unlock() {}
+};
+
+class C_QUEUE {
+public:
+	C_QUEUE()
 	{
-		head = new NODE(std::numeric_limits<int>::min());
-		tail = new NODE(std::numeric_limits<int>::max());
-		head->next = tail;
+		head = tail = new NODE(-1);
 	}
 
-	~CE_QUEUE()
+	~C_QUEUE()
 	{
 		clear();
 		delete head;
-		delete tail;
 	}
 
 	void Enqueue(int x)
 	{
-		enqLock.lock();
-		NODE* newNode = new NODE(x);
-		tail->next = newNode;
-		tail = newNode;
-		enqLock.unlock();
+		NODE* new_node = new NODE(x);
+		set_lock.lock();
+		tail->next = new_node;
+		tail = new_node;
+		set_lock.unlock();
 	}
 	
 	int Dequeue()
 	{
-		int result;
-		deqLock.lock();
-		if (head->next == nullptr) {
-			deqLock.unlock();
+		NODE* temp;
+		set_lock.lock();
+		if (nullptr == head->next) {
+			set_lock.unlock();
 			return -1;
 		}
-		result = head->next->value;
+		int res = head->next->value;
+		temp = head;
 		head = head->next;
-		deqLock.unlock();
-		return result;
+		set_lock.unlock();
+		delete temp;
+		return res;
 	}
 
 	void clear()
 	{
 		NODE* curr = head->next;
-		while (curr != tail) {
-			NODE* temp = curr;
-			curr = curr->next;
-			delete temp;
+		while (nullptr != curr) {
+			NODE* next = curr->next;
+			delete curr;
+			curr = next;
 		}
-		head->next = tail;
+		tail = head;
+		head->next = nullptr;
 	}
 
 	void print20()
 	{
-		auto curr = head->next;
-		for (int i = 0; i < 20 && curr != tail; ++i) {
+		NODE* curr = head->next;
+		for (int i = 0; i < 20 && curr != nullptr; i++, curr = curr->next)
 			std::cout << curr->value << ", ";
-			curr = curr->next;
-		}
-		std::cout << std::endl;
+		std::cout << "\n";
 	}
 private:
-	std::mutex enqLock;
-	std::mutex deqLock;
-	NODE* head;
-	NODE* tail;
+	NODE* head, * tail;
+	std::mutex set_lock;
 };
 
-CE_QUEUE my_queue;
-
-const int NUM_TEST = 400'0000;
-const int MAX_THREADS = 16;
-int num_threads = 0;
-
-class HISTORY {
+class LF_QUEUE {
 public:
-	int op;
-	int i_value;
-	bool o_value;
-	HISTORY(int o, int i, bool re) : op(o), i_value(i), o_value(re) {}
+	LF_QUEUE()
+	{
+		head = tail = new NODE(-1);
+	}
+
+	~LF_QUEUE()
+	{
+		clear();
+		delete head;
+	}
+
+	void clear()
+	{
+		NODE* curr = head->next;
+		while (nullptr != curr) {
+			NODE* next = curr->next;
+			delete curr;
+			curr = next;
+		}
+		tail = head;
+		head->next = nullptr;
+	}
+
+	bool CAS(NODE* volatile* addr, NODE* expected, NODE* new_value)
+	{
+		return std::atomic_compare_exchange_strong(reinterpret_cast<volatile std::atomic<NODE*>*>(addr), &expected, new_value);
+	}
+
+	void Enqueue(int x)
+	{
+		NODE* new_node = new NODE(x);
+		while (true) {
+			NODE* old_tail = tail;
+			NODE* old_next = old_tail->next;
+			if (old_tail != tail)
+				continue;
+			if (old_next == nullptr) {
+				if (CAS(&old_tail->next, nullptr, new_node)) {
+					CAS(&tail, old_tail, new_node);
+					return;
+				}
+			}
+			else
+				CAS(&tail, old_tail, old_next);
+		}
+	}
+
+	int Dequeue()
+	{
+		while (true) {
+			NODE* old_head = head;
+			NODE* old_next = old_head->next;
+			NODE* old_tail = tail;
+			if (old_head != head)
+				continue;
+			if (old_next == nullptr)
+				return -1;
+			if (old_tail == old_head) {
+				CAS(&tail, old_tail, old_next);
+				continue;
+			}
+			int res = old_next->value;
+			if (CAS(&head, old_head, old_next)) {
+				// delete old_head;
+				return res;
+			}
+		}
+	}
+
+	void print20()
+	{
+		NODE* curr = head->next;
+		for (int i = 0; i < 20 && curr != nullptr; i++, curr = curr->next)
+			std::cout << curr->value << ", ";
+		std::cout << "\n";
+	}
+private:
+	NODE* volatile head, * volatile tail;
 };
 
-std::array<std::vector<HISTORY>, MAX_THREADS> history;
 
-void benchmark(const int num_thread)
+
+LF_QUEUE my_queue;
+
+const int NUM_TEST = 10000000;
+
+void benchmark(const int num_thread, int th_id)
 {
+	const int loop_count = NUM_TEST / num_thread;
+
 	int key = 0;
-	for (int i = 0; i < NUM_TEST / num_thread; i++) {
+	for (int i = 0; i < loop_count; i++) {
 		if ((i < 32) || (rand() % 2 == 0))
 			my_queue.Enqueue(key++);
 		else
@@ -113,17 +188,17 @@ int main()
 
 	std::cout << "Benchmarking\n";
 	int key = 0;
-	for (num_threads = 1; num_threads <= MAX_THREADS; num_threads *= 2) {
+	for (int num_threads = 1; num_threads <= MAX_THREADS; num_threads *= 2) {
 		my_queue.clear();
+		auto st = high_resolution_clock::now();
 		std::vector<std::thread> threads;
-		auto start = high_resolution_clock::now();
 		for (int i = 0; i < num_threads; ++i)
-			threads.emplace_back(benchmark, num_threads);
-		for (auto& th : threads)
-			th.join();
-		auto stop = high_resolution_clock::now();
-		auto duration = duration_cast<milliseconds>(stop - start);
-		std::cout << "Threads: " << num_threads << ", Duration: " << duration.count() << " ms.\n";
-		std::cout << "Queue: "; my_queue.print20();
+			threads.emplace_back(benchmark, num_threads, i);
+		for (int i = 0; i < num_threads; ++i)
+			threads[i].join();
+		auto ed = high_resolution_clock::now();
+		auto time_span = duration_cast<milliseconds>(ed - st).count();
+		std::cout << "Thread Count = " << num_threads << ", Exec Time = " << time_span << "ms.\n";
+		std::cout << "Result : ";  my_queue.print20();
 	}
 }
