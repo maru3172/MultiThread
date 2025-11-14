@@ -4,6 +4,7 @@
 #include <chrono>
 #include <mutex>
 #include <Windows.h>
+#include <queue>
 
 const int MAX_THREADS = 16;
 class NODE {
@@ -282,7 +283,7 @@ private:
 };
 
 class STNODE64;
-class alignas(16) STPTR64 {
+class STPTR64 {
 public:
 	void set_ptr(STNODE64* p)
 	{
@@ -318,9 +319,11 @@ public:
 		return CAS128(this, &old_p, &new_p);
 	}
 
-	STNODE64* volatile ptr;
+	alignas(16) STNODE64* volatile ptr;
 	long long stamp;
 };
+
+thread_local std::queue<STNODE64*> free_nodes;
 
 class STNODE64 {
 public:
@@ -358,7 +361,14 @@ public:
 
 	void Enqueue(int x)
 	{
-		STNODE64* new_node = new STNODE64(x);
+		STNODE64* new_node;
+		if (free_nodes.empty()) new_node = new STNODE64(x);
+		else {
+			new_node = free_nodes.front();
+			free_nodes.pop();
+			new_node->value = x;
+			new_node->next.set_ptr(nullptr);
+		}
 		while (true) {
 			long long tail_stamp = 0;
 			STNODE64* old_tail = tail.get_ptr(&tail_stamp);
@@ -393,7 +403,7 @@ public:
 			}
 			int res = old_next->value;
 			if (head.CAS(old_head, old_next, head_stamp, head_stamp + 1)) {
-				delete old_head;
+				free_nodes.push(old_head);
 				return res;
 			}
 		}
@@ -410,7 +420,87 @@ private:
 	STPTR64 head, tail;
 };
 
-C_QUEUE my_queue;
+//class SH_NODE {
+//public:
+//	SH_NODE() : v(-1) {}
+//	SH_NODE(int x) : v(x) {}
+//
+//	int v;
+//	std::atomic<std::shared_ptr<SH_NODE>> next;
+//};
+//
+//class LF_SH_QUEUE {
+//public:
+//	LF_SH_QUEUE()
+//	{
+//		head = std::make_shared<SH_NODE>(-1);
+//		tail.store(head);
+//	}
+//	bool CAS(std::atomic<std::shared_ptr<SH_NODE>>& next, std::shared_ptr<SH_NODE> old_p, const std::shared_ptr<SH_NODE>& new_p)
+//	{
+//		return next.compare_exchange_strong(old_p, new_p);
+//	}
+//	void ENQ(int x)
+//	{
+//		std::shared_ptr<SH_NODE> e = std::make_shared<SH_NODE>(x);
+//		while (true) {
+//			std::shared_ptr<SH_NODE> last = tail;
+//			std::shared_ptr<SH_NODE> next = last->next;
+//			std::shared_ptr<SH_NODE> comp = tail;
+//			if (last != comp) continue;
+//			if (nullptr == next) {
+//				if (true == CAS(last->next, nullptr, e)) {
+//					CAS(tail, last, e);
+//					return;
+//				}
+//			}
+//			else
+//				CAS(tail, last, next);
+//		}
+//	}
+//
+//	int DEQ()
+//	{
+//		while (true) {
+//			std::shared_ptr<SH_NODE>  first = head;
+//			std::shared_ptr<SH_NODE>  last = tail;
+//			std::shared_ptr<SH_NODE>  next = first->next;
+//			std::shared_ptr<SH_NODE> comp = head;
+//			if (first != comp) continue;
+//			if (nullptr == next) return -1;
+//			if (first == last) {
+//				CAS(tail, last, next);
+//				continue;
+//			}
+//			int value = next->v;
+//			if (false == CAS(head, first, next))
+//				continue;
+//			return value;
+//		}
+//	}
+//
+//	void print20()
+//	{
+//		std::shared_ptr<SH_NODE> p = head;
+//		p = p->next;
+//		for (int i = 0; i < 20; ++i) {
+//			if (p == nullptr) break;
+//			std::cout << p->v << ", ";
+//			p = p->next;
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//	void clear()
+//	{
+//		head.store(tail);
+//	}
+//private:
+//	std::atomic<std::shared_ptr<SH_NODE>> head;
+//	std::atomic<std::shared_ptr<SH_NODE>> tail;
+//};
+
+LFST_QUEUE64 my_queue;
 
 const int NUM_TEST = 10000000;
 
