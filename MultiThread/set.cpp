@@ -1149,11 +1149,308 @@ private:
 	DUMMY_MTX mtx;
 };
 
+constexpr int MAX_LEVEL = 9;
 
+class SKNODE {
+public:
+	SKNODE() : value(-1), top_level(0), marked(false), fully_linked(false)
+	{
+		for (auto& p : next) p = nullptr;
+	}
 
-STD_SET set;
+	SKNODE(int x, int top) : value(x), top_level(top), marked(false), fully_linked(false)
+	{
+		for (auto& p : next) p = nullptr;
+	}
 
-const int LOOP = 1'0000;
+	int value;
+	SKNODE* volatile next[MAX_LEVEL + 1];
+	int top_level;
+	volatile bool marked;
+	volatile bool fully_linked;
+	std::recursive_mutex mtx;
+};
+
+class C_SKLIST {
+public:
+	C_SKLIST() {
+		head = new SKNODE(std::numeric_limits<int>::min(), MAX_LEVEL);
+		tail = new SKNODE(std::numeric_limits<int>::max(), MAX_LEVEL);
+		for (auto& p : head->next) p = tail;
+	}
+
+	~C_SKLIST()
+	{
+		clear();
+		delete head;
+		delete tail;
+	}
+
+	void clear()
+	{
+		SKNODE* curr = head->next[0];
+		while (curr != tail) {
+			SKNODE* temp = curr;
+			curr = curr->next[0];
+			delete temp;
+		}
+		for (auto& p : head->next)p = tail;
+	}
+
+	void find(SKNODE* prevs[], SKNODE* currs[], int x)
+	{
+		auto prev = head;
+		for (int level = MAX_LEVEL; level >= 0; --level) {
+			auto curr = prev->next[level];
+			while (curr->value < x) {
+				prev = curr;
+				curr = curr->next[level];
+			}
+			prevs[level] = prev;
+			currs[level] = curr;
+		}
+	}
+
+	bool add(int x)
+	{
+		SKNODE* prevs[MAX_LEVEL + 1];
+		SKNODE* currs[MAX_LEVEL + 1];
+		mtx.lock();
+		find(prevs, currs, x);
+
+		if (currs[0]->value == x) {
+			mtx.unlock();
+			return false;
+		}
+
+		int node_level = 0;
+		for (node_level = 0; node_level < MAX_LEVEL; ++node_level)
+			if (rand() % 2 == 0) break;
+
+		auto newNode = new SKNODE(x, node_level);
+		for (int level = 0; level <= node_level; ++level) {
+			newNode->next[level] = currs[level];
+			prevs[level]->next[level] = newNode;
+		}
+		mtx.unlock();
+		return true;
+	}
+
+	bool remove(int x)
+	{
+		SKNODE* prevs[MAX_LEVEL + 1];
+		SKNODE* currs[MAX_LEVEL + 1];
+		mtx.lock();
+		find(prevs, currs, x);
+
+		if (currs[0]->value == x) {
+			for (int level = 0; level <= currs[0]->top_level; ++level) {
+				prevs[level]->next[level] = currs[level]->next[level];
+			}
+			mtx.unlock();
+			delete currs[0];
+			return true;
+		}
+
+		mtx.unlock();
+		return false;
+	}
+
+	bool contains(int x)
+	{
+		SKNODE* prevs[MAX_LEVEL + 1];
+		SKNODE* currs[MAX_LEVEL + 1];
+		mtx.lock();
+		find(prevs, currs, x);
+
+		if (currs[0]->value == x) {
+			mtx.unlock();
+			return true;
+		}
+		mtx.unlock();
+		return false;
+	}
+
+	void print20()
+	{
+		auto curr = head->next[0];
+		for (int i = 0; i < 20 && curr != tail; ++i) {
+			std::cout << curr->value << ", ";
+			curr = curr->next[0];
+		}
+		std::cout << std::endl;
+	}
+
+private:
+	SKNODE* head, * tail;
+	std::mutex mtx;
+};
+
+class Z_SKLIST {
+public:
+	Z_SKLIST() {
+		head = new SKNODE(std::numeric_limits<int>::min(), MAX_LEVEL);
+		tail = new SKNODE(std::numeric_limits<int>::max(), MAX_LEVEL);
+		for (auto& p : head->next) p = tail;
+		head->fully_linked = tail->fully_linked = true;
+	}
+
+	~Z_SKLIST()
+	{
+		clear();
+		delete head;
+		delete tail;
+	}
+
+	void clear()
+	{
+		SKNODE* curr = head->next[0];
+		while (curr != tail) {
+			SKNODE* temp = curr;
+			curr = curr->next[0];
+			delete temp;
+		}
+		for (auto& p : head->next)p = tail;
+	}
+
+	int find(SKNODE* prevs[], SKNODE* currs[], int x)
+	{
+		int max_level_found = -1;
+		auto prev = head;
+		for (int level = MAX_LEVEL; level >= 0; --level) {
+			auto curr = prev->next[level];
+			while (curr->value < x) {
+				prev = curr;
+				curr = curr->next[level];
+			}
+			if (max_level_found == -1 && x == curr->value)
+				max_level_found = level;
+			prevs[level] = prev;
+			currs[level] = curr;
+		}
+		return max_level_found;
+	}
+
+	bool add(int x)
+	{
+		SKNODE* prevs[MAX_LEVEL + 1];
+		SKNODE* currs[MAX_LEVEL + 1];
+
+		while (true) {
+			int max_level_found = find(prevs, currs, x);
+			if (max_level_found != -1) {
+				SKNODE* nodeFound = currs[max_level_found];
+				if (!nodeFound->marked) {
+					while (!nodeFound->fully_linked) {}
+					return false;
+				}
+				continue;
+			}
+			int highestLocked = -1;
+			bool valid = true;
+			int t_level = 0;
+			for (t_level = 0; valid && t_level < MAX_LEVEL; ++t_level) {
+				if (rand() % 2 == 0) break;
+			}
+
+			for (int level = 0; valid && level <= t_level; ++level){
+				prevs[level]->mtx.lock();
+				highestLocked = level;
+				valid = (!prevs[level]->marked) && (!currs[level]->marked) && (prevs[level]->next[level] == currs[level]);
+			}
+			if (!valid) {
+				for (int level = 0; level <= highestLocked; ++level)
+					prevs[level]->mtx.unlock();
+				continue;
+			}
+			SKNODE* newNode = new SKNODE(x, t_level);
+			for (int level = 0; level <= t_level; ++level) {
+				newNode->next[level] = currs[level];
+				prevs[level]->next[level] = newNode;
+			}
+			newNode->fully_linked = true;
+			for (int level = highestLocked; level >= 0; --level)
+				prevs[level]->mtx.unlock();
+			return true;
+		}
+	}
+
+	bool remove(int x)
+	{
+		SKNODE* prevs[MAX_LEVEL + 1];
+		SKNODE* currs[MAX_LEVEL + 1];
+		int f_level = find(prevs, currs, x);
+
+		if (f_level == -1) return false;
+
+		SKNODE* victim = currs[f_level];
+		if (victim->marked) return false;
+		if (!victim->fully_linked) return false;
+		if (victim->top_level != f_level) return false;
+
+		victim->mtx.lock();
+		if (victim->marked) {
+			victim->mtx.unlock();
+			return false;
+		}
+		victim->marked = true;
+		int top_level = victim->top_level;
+
+		while (true) {
+			bool valid = true;
+			int highest_locked = -1;
+			for (int i = 0; i <= top_level; ++i) {
+				prevs[i]->mtx.lock();
+				highest_locked = i;
+				valid = (!prevs[i]->marked) && (prevs[i]->next[i] == victim);
+				if (!valid) {
+					break;
+				}
+			}
+			if (!valid) {
+				for (int i = 0; i <= highest_locked; ++i)
+					prevs[i]->mtx.unlock();
+				f_level = find(prevs, currs, x);
+				continue;
+			}
+			for (int i = top_level; i >= 0; --i) {
+				prevs[i]->next[i] = victim->next[i];
+			}
+			for (int i = highest_locked; i >= 0; --i) {
+				prevs[i]->mtx.unlock();
+			}
+
+			victim->mtx.unlock();
+			return true;
+		}
+	}
+
+	bool contains(int x)
+	{
+		SKNODE* prevs[MAX_LEVEL + 1];
+		SKNODE* currs[MAX_LEVEL + 1];
+		int f_level = find(prevs, currs, x);
+
+		return (f_level != -1) && (currs[f_level]->fully_linked) && (!currs[f_level]->marked);
+	}
+
+	void print20()
+	{
+		auto curr = head->next[0];
+		for (int i = 0; i < 20 && curr != tail; ++i) {
+			std::cout << curr->value << ", ";
+			curr = curr->next[0];
+		}
+		std::cout << std::endl;
+	}
+
+private:
+	SKNODE* head, * tail;
+};
+
+Z_SKLIST set;
+
+const int LOOP = 400'0000;
 const int RANGE = 1000;
 
 class HISTORY {
